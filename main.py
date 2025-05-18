@@ -7,9 +7,9 @@ def main():
     src.setup_ffmpeg.main()
 
     options = sys.argv
-    if len(options) == 1:
+    if len(options) == 2:
         src.download_songs.main()
-    elif len(options) == 2:
+    elif len(options) == 3:
         src.download_songs.main(options[1])
     else:
         usage()
