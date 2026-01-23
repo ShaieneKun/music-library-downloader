@@ -3,12 +3,14 @@ import re
 import os
 import sys
 import subprocess
+import logging
 
 PLAYLIST_URL = [
     "https://music.youtube.com/browse/VLPL1Fdfnmz532d3N5F-LoMCzAEkUhKctMY7"]
 DEFAULT_DOWNLOAD_DIR = "./auto-downloaded-songs"
 FILENAME_FORMAT = "%(title)s - %(uploader)s - %(id)s.%(ext)s"
 
+log = logging.getLogger(__name__)
 
 def extract_ids_from_filenames(directory, file_format="m4a"):
     """
@@ -31,10 +33,10 @@ def extract_ids_from_filenames(directory, file_format="m4a"):
                 ids.append(extracted_id)
         return ids
     except FileNotFoundError:
-        print(f"Error: Directory '{directory}' not found.8")
+        log.info(f"Error: Directory '{directory}' not found.8")
         return []
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        log.info(f"An unexpected error occurred: {e}")
         return []
 
 
@@ -43,14 +45,14 @@ def filter_url_ids_to_donwload(output_dir, file_format):
     Checks if there are any already downloaded files
     If there are, remove them from the list of ids to download
     """
-    print("\nIdentifying already downloaded songs, and new songs to download...\n")
-    print("Identifying new songs to download...")
+    log.info("\nIdentifying already downloaded songs, and new songs to download...\n")
+    log.info("Identifying new songs to download...")
 
-    command = ["yt-dlp", "--print", "id", "--no-warnings"] + PLAYLIST_URL
+    command = ["yt-dlp", "--log.info", "id", "--no-warnings"] + PLAYLIST_URL
     result = subprocess.run(command, capture_output=True, text=True)
     all_ids_to_downlaod = result.stdout.strip().splitlines()
 
-    print("Identifying already downloaded songs...\n")
+    log.info("Identifying already downloaded songs...\n")
     already_downloaded_ids = extract_ids_from_filenames(output_dir, file_format)
 
     id_subset_to_download = set(all_ids_to_downlaod) - \
@@ -59,9 +61,9 @@ def filter_url_ids_to_donwload(output_dir, file_format):
     ids = [
         f"https://www.youtube.com/watch?v={id}" for id in id_subset_to_download]
 
-    print("All IDs to download: ", all_ids_to_downlaod)
-    print("Already downloaded IDs: ", already_downloaded_ids)
-    print("IDs that will be downloaded: ", id_subset_to_download)
+    log.info("All IDs to download: ", all_ids_to_downlaod)
+    log.info("Already downloaded IDs: ", already_downloaded_ids)
+    log.info("IDs that will be downloaded: ", id_subset_to_download)
 
     return ids
 
@@ -104,10 +106,14 @@ def download(output_dir=None, urls=PLAYLIST_URL, file_format="m4a"):
         ]
     }
 
-    print("Starting donwload...\n")
+    log.info("Starting donwload...\n")
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        error_code = ydl.download(urls)
-    print("\nDonwload finished! 😁\n")
+        try:
+            error_code = ydl.download(urls)
+        except:
+            log.info("An error occurred during the download process.")
+
+    log.info("\nDonwload finished! 😁\n")
 
 
 def main(output_dir=None):
@@ -115,7 +121,7 @@ def main(output_dir=None):
 
 
 def usage():
-    print("Usage: python download_songs.py <output_directory>")
+    log.info("Usage: python download_songs.py <output_directory>")
 
 
 if __name__ == '__main__':

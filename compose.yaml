@@ -1,0 +1,6 @@
+services:
+  music-library-downloader:
+    image: music-library-downloader
+    build:
+      context: .
+      dockerfile: ./Dockerfile
