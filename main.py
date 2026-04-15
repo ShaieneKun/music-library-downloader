@@ -5,13 +5,14 @@ import src.download_songs
 import logging
 from datetime import datetime
 
+
 def setup_logging():
     """Setup logging configuration."""
     logs_dir = './logs'
     if not os.path.exists(logs_dir):
         os.makedirs(logs_dir)
     datetime_for_log = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -21,20 +22,23 @@ def setup_logging():
         ]
     )
 
+
 def main():
     setup_logging()
     src.setup_ffmpeg.main()
 
     options = sys.argv
-    if len(options) == 2:
+    if len(options) == 1:
         src.download_songs.main()
-    elif len(options) == 3:
+    elif len(options) == 2:
         src.download_songs.main(options[1])
     else:
         usage()
 
+
 def usage():
     print("Usage: python main.py <output_directory>")
+
 
 if __name__ == '__main__':
     main()

@@ -4,15 +4,17 @@ import os
 import sys
 import subprocess
 import logging
+import time
 
 PLAYLIST_URL = [
     # "https://music.youtube.com/browse/VLPL1Fdfnmz532d3N5F-LoMCzAEkUhKctMY7",
     "https://music.youtube.com/playlist?list=PL1Fdfnmz532fUiMPemHsxmyAyCJISoD9P"
-    ]
+]
 DEFAULT_DOWNLOAD_DIR = "./auto-downloaded-songs"
 FILENAME_FORMAT = "%(title)s - %(uploader)s - %(id)s.%(ext)s"
 
 log = logging.getLogger(__name__)
+
 
 def extract_ids_from_filenames(directory, file_format="m4a"):
     """
@@ -29,7 +31,8 @@ def extract_ids_from_filenames(directory, file_format="m4a"):
     try:
         for filename in os.listdir(directory):
             # improved regex
-            match = re.search(r'- (?P<id>[^-]+)\.{}$'.format(file_format), filename)
+            match = re.search(
+                r'- (?P<id>[^-]+)\.{}$'.format(file_format), filename)
             if match:
                 extracted_id = match.group('id')
                 ids.append(extracted_id)
@@ -44,18 +47,33 @@ def extract_ids_from_filenames(directory, file_format="m4a"):
 
 def filter_url_ids_to_donwload(output_dir, file_format):
     """
-    Checks if there are any already downloaded files
-    If there are, remove them from the list of ids to download
+    Checks if there are any already downloaded files.
+    If there are, removes them from the list of ids to download.
     """
     log.info("\nIdentifying already downloaded songs, and new songs to download...\n")
     log.info("Identifying new songs to download...")
 
-    command = ["yt-dlp", "--log.info", "id", "--no-warnings"] + PLAYLIST_URL
+    command = [
+        sys.executable,
+        "-m",
+        "yt_dlp",
+        "--flat-playlist",
+        "-O",
+        "id",
+        "--no-warnings",
+    ] + PLAYLIST_URL
     result = subprocess.run(command, capture_output=True, text=True)
     all_ids_to_downlaod = result.stdout.strip().splitlines()
 
+    if result.returncode != 0:
+        log.error(
+            "yt-dlp failed while listing playlist IDs: %s",
+            result.stderr.strip() or "<no stderr>"
+        )
+
     log.info("Identifying already downloaded songs...\n")
-    already_downloaded_ids = extract_ids_from_filenames(output_dir, file_format)
+    already_downloaded_ids = extract_ids_from_filenames(
+        output_dir, file_format)
 
     id_subset_to_download = set(all_ids_to_downlaod) - \
         set(already_downloaded_ids)
@@ -63,9 +81,9 @@ def filter_url_ids_to_donwload(output_dir, file_format):
     ids = [
         f"https://www.youtube.com/watch?v={id}" for id in id_subset_to_download]
 
-    log.info("All IDs to download: ", all_ids_to_downlaod)
-    log.info("Already downloaded IDs: ", already_downloaded_ids)
-    log.info("IDs that will be downloaded: ", id_subset_to_download)
+    log.info("All IDs to download: %s", all_ids_to_downlaod)
+    log.info("Already downloaded IDs: %s", already_downloaded_ids)
+    log.info("IDs that will be downloaded: %s", id_subset_to_download)
 
     return ids
 
@@ -73,9 +91,14 @@ def filter_url_ids_to_donwload(output_dir, file_format):
 def download(output_dir=None, urls=PLAYLIST_URL, file_format="m4a"):
     if output_dir is None:
         output_dir = os.path.join(DEFAULT_DOWNLOAD_DIR, file_format)
-    # output_dir_formatted = os.path.join(output_dir, FILENAME_FORMAT)
+
+    os.makedirs(output_dir, exist_ok=True)
 
     urls = filter_url_ids_to_donwload(output_dir, file_format=file_format)
+    if not urls:
+        log.info("No new songs to download.")
+        return
+
     outtmpl = os.path.join(output_dir, FILENAME_FORMAT)
 
     ydl_opts = {
@@ -108,14 +131,17 @@ def download(output_dir=None, urls=PLAYLIST_URL, file_format="m4a"):
         ]
     }
 
-    log.info("Starting donwload...\n")
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            error_code = ydl.download(urls)
-        except:
-            log.info("An error occurred during the download process.")
+    log.info("Starting downloads...\n")
+    for url in urls:
+        time.sleep(5)
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                error_code = ydl.download(url)
+            except Exception as exc:
+                log.error(
+                    "An error occurred during the download process: %s", exc)
 
-    log.info("\nDonwload finished! 😁\n")
+    log.info("\nDownload finished!\n")
 
 
 def main(output_dir=None):

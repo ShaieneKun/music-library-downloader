@@ -13,6 +13,20 @@
             "args": "${command:pickArgs}"
         },
         {
+            "name": "Run downloader: main.py songs",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "songs"
+            ],
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "pythonPath": "${workspaceFolder}/.venv/bin/python",
+            "justMyCode": true
+        },
+        {
             "name": "Docker: Python - General",
             "type": "docker",
             "request": "launch",

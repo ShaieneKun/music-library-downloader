@@ -1,2 +1,4 @@
 .env
+logs/
+songs/
 __pycache__
