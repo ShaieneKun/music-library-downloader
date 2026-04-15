@@ -6,7 +6,9 @@ import subprocess
 import logging
 
 PLAYLIST_URL = [
-    "https://music.youtube.com/browse/VLPL1Fdfnmz532d3N5F-LoMCzAEkUhKctMY7"]
+    # "https://music.youtube.com/browse/VLPL1Fdfnmz532d3N5F-LoMCzAEkUhKctMY7",
+    "https://music.youtube.com/playlist?list=PL1Fdfnmz532fUiMPemHsxmyAyCJISoD9P"
+    ]
 DEFAULT_DOWNLOAD_DIR = "./auto-downloaded-songs"
 FILENAME_FORMAT = "%(title)s - %(uploader)s - %(id)s.%(ext)s"
 
@@ -78,7 +80,7 @@ def download(output_dir=None, urls=PLAYLIST_URL, file_format="m4a"):
 
     ydl_opts = {
         'format': 'm4a/bestaudio/best',
-        'ffmpeg_location': './',
+        # 'ffmpeg_location': './',
         'writethumbnail': True,
         'embedthumbnail': True,
         'outtmpl': {

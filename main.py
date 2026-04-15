@@ -1,4 +1,5 @@
 import sys
+import os
 import src.setup_ffmpeg
 import src.download_songs
 import logging
@@ -6,19 +7,22 @@ from datetime import datetime
 
 def setup_logging():
     """Setup logging configuration."""
+    logs_dir = './logs'
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir)
     datetime_for_log = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f'./logs/{datetime_for_log}.log', mode='w')
+            logging.FileHandler(f'{logs_dir}/{datetime_for_log}.log', mode='w')
         ]
     )
 
 def main():
-    setup_logging() 
+    setup_logging()
     src.setup_ffmpeg.main()
 
     options = sys.argv
