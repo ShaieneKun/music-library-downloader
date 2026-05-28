@@ -4,6 +4,11 @@ services:
     build:
       context: .
       dockerfile: ./Containerfile
-    command: ["sh", "-c", "pip install debugpy -t /tmp && python /tmp/debugpy --wait-for-client --listen 0.0.0.0:5678 main.py "]
+    env_file:
+      - .env
+    command: ["sh", "-c", "pip install debugpy -t /tmp && python /tmp/debugpy --wait-for-client --listen 0.0.0.0:5678 main.py"]
     ports:
       - 5678:5678
+    volumes:
+      - ./auto-downloaded-songs:/app/auto-downloaded-songs
+      - ./logs:/app/logs

@@ -3,4 +3,10 @@ services:
     image: music-library-downloader
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./Containerfile
+    env_file:
+      - .env
+    command: ["uv", "run", "main.py"]
+    volumes:
+      - ./auto-downloaded-songs:/app/auto-downloaded-songs
+      - ./logs:/app/logs

@@ -24,21 +24,38 @@ def setup_logging():
     )
 
 
+def resolve_download_directory(cli_args=None, env=None):
+    """Resolve the download destination with env var priority over CLI args."""
+    env = os.environ if env is None else env
+    cli_args = sys.argv if cli_args is None else cli_args
+
+    destination_folder = env.get('DESTINATION_FOLDER')
+    if destination_folder:
+        return os.path.expanduser(destination_folder)
+
+    if len(cli_args) == 2:
+        return os.path.expanduser(cli_args[1])
+
+    return None
+
+
 def main():
     while True:
         setup_logging()
         src.setup_ffmpeg.main()
 
         options = sys.argv
-        # No arguments, use default download path
-        if len(options) == 1:
-            src.download_songs.main()
-        elif len(options) == 2:
-        # Given argument, use given download path
+        download_dir = resolve_download_directory(options)
 
-            src.download_songs.main(options[1])
-        else:
+        if len(options) > 2:
             usage()
+            break
+
+        if download_dir is not None:
+            src.download_songs.main(download_dir)
+        else:
+            src.download_songs.main()
+
         time.sleep(3600)
 
 
