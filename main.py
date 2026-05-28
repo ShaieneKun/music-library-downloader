@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 import src.setup_ffmpeg
 import src.download_songs
 import logging
@@ -24,16 +25,21 @@ def setup_logging():
 
 
 def main():
-    setup_logging()
-    src.setup_ffmpeg.main()
+    while True:
+        setup_logging()
+        src.setup_ffmpeg.main()
 
-    options = sys.argv
-    if len(options) == 1:
-        src.download_songs.main()
-    elif len(options) == 2:
-        src.download_songs.main(options[1])
-    else:
-        usage()
+        options = sys.argv
+        # No arguments, use default download path
+        if len(options) == 1:
+            src.download_songs.main()
+        elif len(options) == 2:
+        # Given argument, use given download path
+
+            src.download_songs.main(options[1])
+        else:
+            usage()
+        time.sleep(3600)
 
 
 def usage():

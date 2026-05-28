@@ -54,7 +54,8 @@ def filter_url_ids_to_donwload(output_dir, file_format):
     log.info("Identifying new songs to download...")
 
     command = [
-        sys.executable,
+        "uv",
+        "run",
         "-m",
         "yt_dlp",
         "--flat-playlist",
@@ -63,7 +64,7 @@ def filter_url_ids_to_donwload(output_dir, file_format):
         "--no-warnings",
     ] + PLAYLIST_URL
     result = subprocess.run(command, capture_output=True, text=True)
-    all_ids_to_downlaod = result.stdout.strip().splitlines()
+    all_ids_to_download = result.stdout.strip().splitlines()
 
     if result.returncode != 0:
         log.error(
@@ -75,20 +76,20 @@ def filter_url_ids_to_donwload(output_dir, file_format):
     already_downloaded_ids = extract_ids_from_filenames(
         output_dir, file_format)
 
-    id_subset_to_download = set(all_ids_to_downlaod) - \
+    id_subset_to_download = set(all_ids_to_download) - \
         set(already_downloaded_ids)
 
     ids = [
         f"https://www.youtube.com/watch?v={id}" for id in id_subset_to_download]
 
-    log.info("All IDs to download: %s", all_ids_to_downlaod)
+    log.info("All IDs to download: %s", all_ids_to_download)
     log.info("Already downloaded IDs: %s", already_downloaded_ids)
     log.info("IDs that will be downloaded: %s", id_subset_to_download)
 
     return ids
 
 
-def download(output_dir=None, urls=PLAYLIST_URL, file_format="m4a"):
+def download_main(output_dir=None, urls=PLAYLIST_URL, file_format="m4a"):
     if output_dir is None:
         output_dir = os.path.join(DEFAULT_DOWNLOAD_DIR, file_format)
 
@@ -133,19 +134,21 @@ def download(output_dir=None, urls=PLAYLIST_URL, file_format="m4a"):
 
     log.info("Starting downloads...\n")
     for url in urls:
-        time.sleep(5)
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                error_code = ydl.download(url)
-            except Exception as exc:
-                log.error(
-                    "An error occurred during the download process: %s", exc)
+        time.sleep(3)
+        download_song(ydl_opts, url)
 
     log.info("\nDownload finished!\n")
 
+def download_song(ydl_opts: dict, url: str):
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            result = ydl.download(url)
+        except Exception as exc:
+            log.error(
+                "An error occurred during the download process: %s", exc)
 
 def main(output_dir=None):
-    download(output_dir)
+    download_main(output_dir)
 
 
 def usage():
