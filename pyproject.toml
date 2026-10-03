@@ -1,9 +1,14 @@
 [project]
 name = "music-library-downloader"
 version = "0.1.0"
-description = "Add your description here"
+description = "Keeps a local audio library in sync with YouTube Music playlists using yt-dlp"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "yt-dlp>=2025.12.8",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
 ]

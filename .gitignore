@@ -1,4 +1,6 @@
 .env
 logs/
 songs/
-__pycache__
+auto-downloaded-songs/
+.venv/
+__pycache__/

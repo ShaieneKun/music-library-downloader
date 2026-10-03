@@ -1,123 +1,113 @@
-import yt_dlp
-import re
-import os
-import sys
-import subprocess
+import argparse
 import logging
+import os
+import re
 import time
 
-PLAYLIST_URL = [
-    # "https://music.youtube.com/browse/VLPL1Fdfnmz532d3N5F-LoMCzAEkUhKctMY7",
+import yt_dlp
+
+DEFAULT_PLAYLIST_URLS = [
     "https://music.youtube.com/playlist?list=PL1Fdfnmz532fUiMPemHsxmyAyCJISoD9P"
 ]
 DEFAULT_DOWNLOAD_DIR = "./auto-downloaded-songs"
+DEFAULT_FILE_FORMAT = "m4a"
 FILENAME_FORMAT = "%(title)s - %(uploader)s - %(id)s.%(ext)s"
+SECONDS_BETWEEN_DOWNLOADS = 3
+
+# YouTube video IDs are exactly 11 characters from [A-Za-z0-9_-]
+VIDEO_ID_PATTERN = r'[A-Za-z0-9_-]{11}'
 
 log = logging.getLogger(__name__)
 
 
-def extract_ids_from_filenames(directory, file_format="m4a"):
+def playlist_urls_from_env(env=None):
     """
-    Extracts IDs from already downloaded files to filenames in a directory.
+    Reads playlist URLs from the PLAYLIST_URLS env var (comma or whitespace
+    separated), falling back to DEFAULT_PLAYLIST_URLS.
+    """
+    env = os.environ if env is None else env
+    raw = env.get('PLAYLIST_URLS', '')
+    urls = [url for url in re.split(r'[,\s]+', raw) if url]
+    return urls or list(DEFAULT_PLAYLIST_URLS)
+
+
+def extract_ids_from_filenames(directory, file_format=DEFAULT_FILE_FORMAT):
+    """
+    Extracts video IDs from the filenames of already downloaded files.
 
     Args:
         directory (str): The path to the directory.
+        file_format (str): The audio file extension to look for.
 
     Returns:
-        list: A list of extracted IDs.
+        set: The extracted IDs.
     """
+    pattern = re.compile(
+        r'- (?P<id>{})\.{}$'.format(VIDEO_ID_PATTERN, re.escape(file_format)))
 
-    ids = []
     try:
-        for filename in os.listdir(directory):
-            # improved regex
-            match = re.search(
-                r'- (?P<id>[^-]+)\.{}$'.format(file_format), filename)
-            if match:
-                extracted_id = match.group('id')
-                ids.append(extracted_id)
-        return ids
+        filenames = os.listdir(directory)
     except FileNotFoundError:
-        log.info(f"Error: Directory '{directory}' not found.8")
-        return []
-    except Exception as e:
-        log.info(f"An unexpected error occurred: {e}")
-        return []
+        log.warning("Directory '%s' not found.", directory)
+        return set()
 
-
-def filter_url_ids_to_donwload(output_dir, file_format):
-    """
-    Checks if there are any already downloaded files.
-    If there are, removes them from the list of ids to download.
-    """
-    log.info("\nIdentifying already downloaded songs, and new songs to download...\n")
-    log.info("Identifying new songs to download...")
-
-    command = [
-        "uv",
-        "run",
-        "-m",
-        "yt_dlp",
-        "--flat-playlist",
-        "-O",
-        "id",
-        "--no-warnings",
-    ] + PLAYLIST_URL
-    result = subprocess.run(command, capture_output=True, text=True)
-    all_ids_to_download = result.stdout.strip().splitlines()
-
-    if result.returncode != 0:
-        log.error(
-            "yt-dlp failed while listing playlist IDs: %s",
-            result.stderr.strip() or "<no stderr>"
-        )
-
-    log.info("Identifying already downloaded songs...\n")
-    already_downloaded_ids = extract_ids_from_filenames(
-        output_dir, file_format)
-
-    id_subset_to_download = set(all_ids_to_download) - \
-        set(already_downloaded_ids)
-
-    ids = [
-        f"https://www.youtube.com/watch?v={id}" for id in id_subset_to_download]
-
-    log.info("All IDs to download: %s", all_ids_to_download)
-    log.info("Already downloaded IDs: %s", already_downloaded_ids)
-    log.info("IDs that will be downloaded: %s", id_subset_to_download)
-
+    ids = set()
+    for filename in filenames:
+        match = pattern.search(filename)
+        if match:
+            ids.add(match.group('id'))
     return ids
 
 
-def download_main(output_dir=None, urls=PLAYLIST_URL, file_format="m4a"):
-    if output_dir is None:
-        output_dir = os.path.join(DEFAULT_DOWNLOAD_DIR, file_format)
+def fetch_playlist_ids(playlist_urls):
+    """Lists the video IDs of every playlist without downloading anything."""
+    ids = []
+    with yt_dlp.YoutubeDL({'extract_flat': True, 'quiet': True, 'no_warnings': True}) as ydl:
+        for playlist_url in playlist_urls:
+            try:
+                info = ydl.extract_info(playlist_url, download=False)
+            except yt_dlp.utils.DownloadError as exc:
+                log.error("Failed to list playlist %s: %s", playlist_url, exc)
+                continue
+            ids.extend(entry['id'] for entry in info.get('entries') or [] if entry)
+    return ids
 
-    os.makedirs(output_dir, exist_ok=True)
 
-    urls = filter_url_ids_to_donwload(output_dir, file_format=file_format)
-    if not urls:
-        log.info("No new songs to download.")
-        return
+def filter_urls_to_download(output_dir, playlist_urls, file_format):
+    """
+    Returns the video URLs from the playlists that have not been downloaded yet.
+    """
+    log.info("Identifying new songs to download...")
+    all_ids = fetch_playlist_ids(playlist_urls)
 
-    outtmpl = os.path.join(output_dir, FILENAME_FORMAT)
+    log.info("Identifying already downloaded songs...")
+    already_downloaded_ids = extract_ids_from_filenames(output_dir, file_format)
 
-    ydl_opts = {
-        'format': 'm4a/bestaudio/best',
-        # 'ffmpeg_location': './',
+    ids_to_download = [id for id in dict.fromkeys(all_ids)
+                       if id not in already_downloaded_ids]
+
+    log.info("Playlist IDs: %d, already downloaded: %d, to download: %d",
+             len(set(all_ids)), len(already_downloaded_ids), len(ids_to_download))
+    log.debug("IDs that will be downloaded: %s", ids_to_download)
+
+    return [f"https://www.youtube.com/watch?v={id}" for id in ids_to_download]
+
+
+def build_ydl_opts(output_dir, file_format):
+    return {
+        'format': f'{file_format}/bestaudio/best',
         'writethumbnail': True,
         'embedthumbnail': True,
         'outtmpl': {
-            'default': outtmpl,
+            'default': os.path.join(output_dir, FILENAME_FORMAT),
             'pl_thumbnail': ''
         },
         # ℹ️ See help(yt_dlp.postprocessor) for a list of available Postprocessors and their arguments
         'postprocessors': [
-            # Don't change postprocessors order, othewise metadata or thumbnail mail fail to be embedded
+            # Don't change postprocessors order, otherwise metadata or thumbnail may fail to be embedded
             {
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': file_format,
-                'preferredquality': 'best',
             },
             {
                 'key': 'FFmpegMetadata',
@@ -126,40 +116,46 @@ def download_main(output_dir=None, urls=PLAYLIST_URL, file_format="m4a"):
                 'add_infojson': 'if_exists',
             },
             {
-                # Leave this as the last item on the dict
+                # Leave this as the last item on the list
                 'key': 'EmbedThumbnail',
             },
         ]
     }
 
-    log.info("Starting downloads...\n")
-    for url in urls:
-        time.sleep(3)
-        download_song(ydl_opts, url)
 
-    log.info("\nDownload finished!\n")
+def download_main(output_dir=None, playlist_urls=None, file_format=DEFAULT_FILE_FORMAT):
+    if output_dir is None:
+        output_dir = os.path.join(DEFAULT_DOWNLOAD_DIR, file_format)
+    if playlist_urls is None:
+        playlist_urls = playlist_urls_from_env()
 
-def download_song(ydl_opts: dict, url: str):
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            result = ydl.download(url)
-        except Exception as exc:
-            log.error(
-                "An error occurred during the download process: %s", exc)
+    os.makedirs(output_dir, exist_ok=True)
+
+    urls = filter_urls_to_download(output_dir, playlist_urls, file_format)
+    if not urls:
+        log.info("No new songs to download.")
+        return
+
+    log.info("Starting downloads...")
+    with yt_dlp.YoutubeDL(build_ydl_opts(output_dir, file_format)) as ydl:
+        for url in urls:
+            time.sleep(SECONDS_BETWEEN_DOWNLOADS)
+            try:
+                ydl.download([url])
+            except Exception as exc:
+                log.error("Failed to download %s: %s", url, exc)
+
+    log.info("Download finished!")
+
 
 def main(output_dir=None):
     download_main(output_dir)
 
 
-def usage():
-    log.info("Usage: python download_songs.py <output_directory>")
-
-
 if __name__ == '__main__':
-    options = sys.argv
-    if len(options) == 1:
-        main()
-    elif len(options) == 2:
-        main(options[1])
-    else:
-        usage()
+    parser = argparse.ArgumentParser(
+        description="Download new songs from the configured playlists once.")
+    parser.add_argument('output_dir', nargs='?', help="Directory to save songs to.")
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO)
+    main(args.output_dir)

@@ -1,5 +1,4 @@
-# For more information, please refer to https://aka.ms/vscode-docker-python
-FROM python:3-slim
+FROM python:3.14-slim
 
 # Keeps Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -7,21 +6,24 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Turns off buffering for easier container logging
 ENV PYTHONUNBUFFERED=1
 
-# Install dependencies
+# Use the project virtualenv for every python invocation (including the debug compose)
+ENV PATH="/app/.venv/bin:$PATH"
 
-WORKDIR /app
-COPY . /app
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir uv
-
-# Creates a non-root user with an explicit UID and adds permission to access the /app folder
+# Creates a non-root user with an explicit UID
 # For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
-RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
+RUN adduser -u 5678 --disabled-password --gecos "" appuser
+WORKDIR /app
+RUN chown appuser /app
 USER appuser
 
-RUN uv sync
+# Install dependencies first so code changes don't invalidate this layer
+COPY --chown=appuser pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
+COPY --chown=appuser . .
 
 # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-CMD ["uv", "run", "main.py"]
+CMD ["uv", "run", "--no-sync", "main.py"]

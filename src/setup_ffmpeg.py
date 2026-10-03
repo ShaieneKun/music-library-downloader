@@ -1,38 +1,32 @@
-import os
+import logging
 import shutil
 import sys
 
+REQUIRED_EXECUTABLES = ("ffmpeg", "ffprobe")
 
-def ffmpeg_is_available():
-    return shutil.which("ffmpeg") is not None
+log = logging.getLogger(__name__)
 
 
-def ffprobe_is_available():
-    return shutil.which("ffprobe") is not None
+def missing_executables():
+    return [name for name in REQUIRED_EXECUTABLES if shutil.which(name) is None]
 
 
 def main():
-    print("Checking for system-installed ffmpeg and ffprobe...")
-    ffmpeg_available = ffmpeg_is_available()
-    ffprobe_available = ffprobe_is_available()
+    log.info("Checking for system-installed ffmpeg and ffprobe...")
+    missing = missing_executables()
 
-    if ffmpeg_available and ffprobe_available:
-        print("System ffmpeg and ffprobe are available on PATH, continuing...\n")
+    if not missing:
+        log.info("System ffmpeg and ffprobe are available on PATH, continuing...")
         return
 
-    missing = []
-    if not ffmpeg_available:
-        missing.append("ffmpeg")
-    if not ffprobe_available:
-        missing.append("ffprobe")
-
-    print(
-        "Error: The following required executable(s) are not available on PATH: "
-        + ", ".join(missing)
-        + ".\nPlease install the system ffmpeg package and try again."
+    log.error(
+        "The following required executable(s) are not available on PATH: %s. "
+        "Please install the system ffmpeg package and try again.",
+        ", ".join(missing)
     )
     sys.exit(1)
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
     main()

@@ -4,9 +4,10 @@ services:
     build:
       context: .
       dockerfile: ./Containerfile
+    restart: unless-stopped
     env_file:
       - .env
-    command: ["uv", "run", "main.py"]
+    command: ["uv", "run", "--no-sync", "main.py"]
     volumes:
       - ./auto-downloaded-songs:/app/auto-downloaded-songs
       - ./logs:/app/logs
