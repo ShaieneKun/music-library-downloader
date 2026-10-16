@@ -4,9 +4,15 @@ services:
     build:
       context: .
       dockerfile: ./Containerfile
+    container_name: music-library-downloader
+    restart: unless-stopped
     env_file:
       - .env
-    command: ["uv", "run", "main.py"]
     volumes:
-      - ./auto-downloaded-songs:/app/auto-downloaded-songs
-      - ./logs:/app/logs
+      # Named volume works the same on Linux, macOS and Windows.
+      # To browse the songs on the host instead, use e.g. ./data:/data
+      - data:/data
+    stop_grace_period: 30s
+
+volumes:
+  data:

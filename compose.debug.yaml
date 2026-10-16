@@ -10,5 +10,7 @@ services:
     ports:
       - 5678:5678
     volumes:
-      - ./auto-downloaded-songs:/app/auto-downloaded-songs
-      - ./logs:/app/logs
+      - data:/data
+
+volumes:
+  data:

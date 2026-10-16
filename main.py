@@ -1,25 +1,30 @@
 import sys
 import os
-import time
+import signal
+import threading
+import logging
+from logging.handlers import RotatingFileHandler
+
 import src.setup_ffmpeg
 import src.download_songs
-import logging
-from datetime import datetime
+import src.drive_upload
+from src import config
+
+stop_event = threading.Event()
 
 
 def setup_logging():
-    """Setup logging configuration."""
-    logs_dir = './logs'
-    if not os.path.exists(logs_dir):
-        os.makedirs(logs_dir)
-    datetime_for_log = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    """Log to stdout (docker logs) and a size-capped file."""
+    logs_dir = os.environ.get('LOG_DIR') or './logs'
+    os.makedirs(logs_dir, exist_ok=True)
 
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(f'{logs_dir}/{datetime_for_log}.log', mode='w')
+            RotatingFileHandler(f'{logs_dir}/app.log',
+                                maxBytes=5_000_000, backupCount=3),
         ]
     )
 
@@ -39,29 +44,48 @@ def resolve_download_directory(cli_args=None, env=None):
     return None
 
 
-def main():
-    while True:
-        setup_logging()
-        src.setup_ffmpeg.main()
-
-        options = sys.argv
-        download_dir = resolve_download_directory(options)
-
-        if len(options) > 2:
-            usage()
-            break
-
-        if download_dir is not None:
+def run_forever(download_dir=None):
+    log = logging.getLogger("main")
+    interval = config.interval_seconds()
+    while not stop_event.is_set():
+        try:
             src.download_songs.main(download_dir)
-        else:
-            src.download_songs.main()
+        except Exception:
+            # Never let one bad cycle kill the long-running container.
+            log.exception("Cycle failed; will retry after the interval.")
+        log.info("Sleeping %d seconds until next check.", interval)
+        stop_event.wait(interval)
 
-        time.sleep(3600)
+
+def main(argv=None):
+    argv = sys.argv if argv is None else argv
+    command = argv[1] if len(argv) > 1 and argv[1] in ("run", "once", "auth") else "run"
+    if command == "auth":
+        src.drive_upload.authorize()
+        return 0
+
+    setup_logging()
+    src.setup_ffmpeg.main()
+
+    path_args = [a for a in argv[1:] if a not in ("run", "once")]
+    if len(path_args) > 1:
+        usage()
+        return 1
+    download_dir = resolve_download_directory(["main.py"] + path_args)
+
+    if command == "once":
+        src.download_songs.main(download_dir)
+        return 0
+
+    signal.signal(signal.SIGTERM, lambda *_: stop_event.set())
+    signal.signal(signal.SIGINT, lambda *_: stop_event.set())
+    run_forever(download_dir)
+    return 0
 
 
 def usage():
-    print("Usage: python main.py <output_directory>")
+    print("Usage: python main.py [run|once|auth] [output_directory]")
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
