@@ -8,7 +8,7 @@ The service ships as a container (`Containerfile`, based on `python:3.14-slim` w
 | --- | --- | --- |
 | `/data/songs` | **`MUSIC_DIR`** on the host (bind mount) | Downloaded `.m4a` files |
 | `/data/state` | `data` named volume | Google Drive token and upload record |
-| `/data/logs` | `data` named volume | Rotating `app.log` (5 MB x 3) |
+| `/data/logs` | `data` named volume | Rotating `app.log` (5 MB x 3) and per-cycle `cycle-*.log` run logs |
 
 The container sets `DESTINATION_FOLDER=/data/songs`, `STATE_DIR=/data/state`, `LOG_DIR=/data/logs`.
 
