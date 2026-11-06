@@ -31,3 +31,24 @@ class UpdateConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DownloadConfigTests(unittest.TestCase):
+    def test_workers_default_and_minimum(self):
+        self.assertEqual(config.download_workers({}), 4)
+        self.assertEqual(config.download_workers({"DOWNLOAD_WORKERS": ""}), 4)
+        self.assertEqual(config.download_workers({"DOWNLOAD_WORKERS": "4"}), 4)
+        self.assertEqual(config.download_workers({"DOWNLOAD_WORKERS": "0"}), 1)
+
+    def test_sleep_default_and_parsing(self):
+        self.assertEqual(config.download_sleep_seconds({}), 2)
+        self.assertEqual(
+            config.download_sleep_seconds({"DOWNLOAD_SLEEP_SECONDS": "0.5"}), 0.5)
+        self.assertEqual(
+            config.download_sleep_seconds({"DOWNLOAD_SLEEP_SECONDS": "0"}), 0)
+
+    def test_retries_default_and_minimum(self):
+        self.assertEqual(config.download_retries({}), 2)
+        self.assertEqual(config.download_retries({"DOWNLOAD_RETRIES": "0"}), 0)
+        self.assertEqual(config.download_retries({"DOWNLOAD_RETRIES": "5"}), 5)
+        self.assertEqual(config.download_retries({"DOWNLOAD_RETRIES": "-1"}), 0)

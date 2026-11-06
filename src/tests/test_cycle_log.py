@@ -182,7 +182,7 @@ class CycleLogTests(unittest.TestCase):
             logging.getLogger("yt_dlp").debug("[download] details")
 
         rep, _ = self.run_cycle_with(ids=["bbbbbbbbbbb"], download=chatty)
-        self.assertIn("DEBUG - yt_dlp - [download] details", read(rep.log_file))
+        self.assertIn("yt_dlp - [download] details", read(rep.log_file))
         self.assertEqual(root.handlers, handlers_before)
         self.assertEqual(root.level, level_before)
 

@@ -87,3 +87,21 @@ def skip_download_if_uploaded(env=None):
 def delete_after_upload(env=None):
     env = os.environ if env is None else env
     return _bool(env.get("DELETE_AFTER_UPLOAD"))
+
+
+def download_workers(env=None):
+    """Number of songs downloaded in parallel (minimum 1)."""
+    env = os.environ if env is None else env
+    return max(1, int(env.get("DOWNLOAD_WORKERS") or 4))
+
+
+def download_sleep_seconds(env=None):
+    """Minimum gap between song download starts, across all workers."""
+    env = os.environ if env is None else env
+    return max(0.0, float(env.get("DOWNLOAD_SLEEP_SECONDS") or 2))
+
+
+def download_retries(env=None):
+    """Extra attempts for a song after a transient download error."""
+    env = os.environ if env is None else env
+    return max(0, int(env.get("DOWNLOAD_RETRIES") or 2))

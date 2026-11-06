@@ -14,7 +14,7 @@ import src.report
 import src.updater
 from src import config
 
-LOG_FORMAT = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+LOG_FORMAT = '%(asctime)s - %(levelname)s - %(threadName)s - %(name)s - %(message)s'
 
 stop_event = threading.Event()
 
@@ -84,7 +84,8 @@ def run_logged_cycle(download_dir=None, daemon_started=None, daemon_cycles=None)
         report.daemon_cycles = daemon_cycles
     try:
         try:
-            src.download_songs.run_cycle(download_dir, report=report)
+            src.download_songs.run_cycle(download_dir, report=report,
+                                         stop_event=stop_event)
         except Exception:
             log.exception("Cycle failed.")
         report.errors = errors.count

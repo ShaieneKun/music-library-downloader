@@ -55,6 +55,9 @@ With Drive upload enabled, the log is also uploaded to the `logs` folder inside 
 | `INTERVAL_SECONDS` | `3600` | Time between checks |
 | `MUSIC_DIR` | `~/Music` | Host directory for downloaded songs (absolute path; created if missing) |
 | `HOST_HOSTNAME` | container hostname | Machine name shown in the cycle summary; set the real host name (e.g. `export HOST_HOSTNAME=$(hostname)`) |
+| `DOWNLOAD_WORKERS` | `4` | Songs downloaded in parallel |
+| `DOWNLOAD_SLEEP_SECONDS` | `2` | Minimum pause between song download starts, shared by all workers |
+| `DOWNLOAD_RETRIES` | `2` | Extra attempts per song after a transient error (HTTP 403/429/5xx, timeouts, dropped connections). Permanent errors such as removed videos are not retried. Leftover files of a song that still fails are deleted |
 | `YTDLP_AUTO_UPDATE` | `true` | Upgrade `yt-dlp` at startup and then periodically; the service restarts itself if a new version was installed |
 | `YTDLP_UPDATE_INTERVAL_SECONDS` | `86400` | Time between update checks |
 | `LOG_KEEP_IDLE` | `false` | Keep (and upload) the run log even when a cycle did nothing |

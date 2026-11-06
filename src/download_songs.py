@@ -3,6 +3,8 @@ import os
 import sys
 import logging
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from . import config
 from . import drive_upload
@@ -91,16 +93,127 @@ def _ydl_opts(output_dir, file_format):
     }
 
 
-def download_song(ydl_opts: dict, url: str):
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+# Errors worth retrying: network hiccups and YouTube rejecting a request.
+# Anything else (video removed, private, not available in your country) is
+# permanent and is not retried.
+TRANSIENT_ERRORS = (
+    "HTTP Error 403", "HTTP Error 429", "HTTP Error 5", "timed out",
+    "Connection reset", "Connection aborted", "Remote end closed",
+    "IncompleteRead", "Temporary failure", "Unable to connect",
+)
+RETRY_BACKOFF_SECONDS = 5
+
+
+def is_transient_error(exc):
+    message = str(exc)
+    return any(marker in message for marker in TRANSIENT_ERRORS)
+
+
+def remove_leftover_files(directory, song_id, keep_format="m4a"):
+    """Delete files a failed download left behind (.webp, .part, ...)."""
+    if not os.path.isdir(directory):
+        return []
+    marker = f" - {song_id}."
+    removed = []
+    for name in os.listdir(directory):
+        if marker in name and not name.endswith("." + keep_format):
+            try:
+                os.remove(os.path.join(directory, name))
+                removed.append(name)
+            except OSError as exc:
+                log.warning("Could not remove leftover %s: %s", name, exc)
+    return removed
+
+
+def download_song(ydl_opts: dict, url: str, retries=None, sleep=None):
+    """Download one song. Retries transient errors; returns True on success.
+
+    After the last failed attempt, files left behind by the song are removed.
+    """
+    retries = config.download_retries() if retries is None else retries
+    sleep = sleep or (lambda seconds: time.sleep(seconds))
+    song_id = url.rsplit("=", 1)[-1]
+    for attempt in range(retries + 1):
         try:
-            ydl.download(url)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download(url)
+            return True
         except Exception as exc:
+            if attempt < retries and is_transient_error(exc):
+                delay = RETRY_BACKOFF_SECONDS * (attempt + 1)
+                log.warning("Transient error downloading %s (attempt %d/%d), "
+                            "retrying in %ds: %s", song_id, attempt + 1,
+                            retries + 1, delay, exc)
+                sleep(delay)
+                continue
             log.error(
                 "An error occurred during the download process: %s", exc)
+            break
+    directory = os.path.dirname(ydl_opts["outtmpl"]["default"])
+    codec = ydl_opts["postprocessors"][0].get("preferredcodec", "m4a")
+    for name in remove_leftover_files(directory, song_id, codec):
+        log.info("Removed leftover file from failed download: %s", name)
+    return False
 
 
-def download_main(output_dir=None, urls=None, file_format="m4a", report=None):
+class StartThrottle:
+    """Keeps at least `gap` seconds between song starts across all workers."""
+
+    def __init__(self, gap, clock=None, sleep=None):
+        self.gap = gap
+        # Looked up at call time so tests can patch time.sleep.
+        self._clock = clock or (lambda: time.monotonic())
+        self._sleep = sleep or (lambda seconds: time.sleep(seconds))
+        self._lock = threading.Lock()
+        self._next_start = None
+
+    def wait(self):
+        # Reserve the next start slot under the lock, sleep outside of it.
+        with self._lock:
+            now = self._clock()
+            start = now if self._next_start is None else max(now, self._next_start)
+            self._next_start = start + self.gap
+        if start > now:
+            self._sleep(start - now)
+
+
+def download_all(ids, ydl_opts, workers=1, gap=3, stop_event=None,
+                 downloader=None, throttle=None):
+    """Download `ids` with a pool of worker threads pulling from one queue.
+
+    Starts are spaced `gap` seconds apart across all workers. Songs not yet
+    started are skipped once `stop_event` is set; songs in progress finish.
+    Returns the list of ids that were actually attempted.
+    """
+    downloader = downloader or download_song
+    throttle = throttle or StartThrottle(gap)
+    ids = list(dict.fromkeys(ids))  # drop duplicates, keep order
+    attempted = []
+    lock = threading.Lock()
+
+    def one(song_id):
+        if stop_event is not None and stop_event.is_set():
+            return
+        throttle.wait()
+        if stop_event is not None and stop_event.is_set():
+            return
+        with lock:
+            attempted.append(song_id)
+        log.info("Downloading %s", song_id)
+        downloader(ydl_opts, f"https://www.youtube.com/watch?v={song_id}")
+
+    with ThreadPoolExecutor(max_workers=max(1, workers),
+                            thread_name_prefix="dl") as pool:
+        for future in [pool.submit(one, i) for i in ids]:
+            try:
+                future.result()
+            except Exception:
+                log.exception("Unexpected error in download worker.")
+    return attempted
+
+
+def download_main(output_dir=None, urls=None, file_format="m4a", report=None,
+                  stop_event=None):
     """Download new songs. Fills `report` (a CycleReport) as it goes."""
     report = report or CycleReport()
     if output_dir is None:
@@ -127,11 +240,11 @@ def download_main(output_dir=None, urls=None, file_format="m4a", report=None):
 
     before = drive_upload.local_song_ids(output_dir, file_format)
     ydl_opts = _ydl_opts(output_dir, file_format)
-    log.info("Starting downloads...")
-    for song_id in todo:
-        time.sleep(3)
-        log.info("Downloading %s", song_id)
-        download_song(ydl_opts, f"https://www.youtube.com/watch?v={song_id}")
+    workers = config.download_workers()
+    log.info("Starting downloads (%d worker(s), %ss between starts)...",
+             workers, config.download_sleep_seconds())
+    download_all(todo, ydl_opts, workers=workers,
+                 gap=config.download_sleep_seconds(), stop_event=stop_event)
 
     after = drive_upload.local_song_ids(output_dir, file_format)
     report.downloaded = [n for i, n in after.items() if i not in before]
@@ -141,7 +254,7 @@ def download_main(output_dir=None, urls=None, file_format="m4a", report=None):
     return report
 
 
-def run_cycle(output_dir=None, file_format="m4a", report=None):
+def run_cycle(output_dir=None, file_format="m4a", report=None, stop_event=None):
     """One full cycle: download new songs, then upload to Drive if enabled."""
     report = report or CycleReport()
     if output_dir is None:
@@ -150,7 +263,8 @@ def run_cycle(output_dir=None, file_format="m4a", report=None):
     report.drive_songs_path = drive_upload.drive_path()
     report.drive_logs_path = drive_upload.drive_path("logs")
 
-    download_main(output_dir, file_format=file_format, report=report)
+    download_main(output_dir, file_format=file_format, report=report,
+                  stop_event=stop_event)
     if report.drive_enabled:
         log.info("Google Drive songs path: %s", report.drive_songs_path)
         report.uploaded, report.upload_failed = drive_upload.upload_new_songs(
