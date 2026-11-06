@@ -143,6 +143,23 @@ class DownloadAllTests(unittest.TestCase):
         self.assertEqual(attempted, ["a"])
         self.assertEqual(len(calls), 1)
 
+    def test_report_records_retries_and_recovery(self):
+        from src.report import CycleReport
+        report = CycleReport()
+
+        # Use the default downloader path with a patched download_song.
+        def fake_song(opts, url, on_retry=None, **_):
+            sid = url.rsplit("=", 1)[1]
+            if sid in ("b", "c"):
+                on_retry(sid, 1, Exception("HTTP Error 403"))
+            return sid != "c"
+
+        with mock.patch.object(download_songs, "download_song", fake_song):
+            download_all(["a", "b", "c"], {}, workers=2, throttle=NoThrottle(),
+                         report=report)
+        self.assertEqual(report.retries, {"b": 1, "c": 1})
+        self.assertEqual(report.retry_recovered, ["b"])
+
     def test_stop_event_already_set_downloads_nothing(self):
         stop = threading.Event()
         stop.set()

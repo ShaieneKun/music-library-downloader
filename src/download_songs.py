@@ -125,7 +125,8 @@ def remove_leftover_files(directory, song_id, keep_format="m4a"):
     return removed
 
 
-def download_song(ydl_opts: dict, url: str, retries=None, sleep=None):
+def download_song(ydl_opts: dict, url: str, retries=None, sleep=None,
+                  on_retry=None):
     """Download one song. Retries transient errors; returns True on success.
 
     After the last failed attempt, files left behind by the song are removed.
@@ -144,6 +145,8 @@ def download_song(ydl_opts: dict, url: str, retries=None, sleep=None):
                 log.warning("Transient error downloading %s (attempt %d/%d), "
                             "retrying in %ds: %s", song_id, attempt + 1,
                             retries + 1, delay, exc)
+                if on_retry:
+                    on_retry(song_id, attempt + 1, exc)
                 sleep(delay)
                 continue
             log.error(
@@ -178,18 +181,31 @@ class StartThrottle:
 
 
 def download_all(ids, ydl_opts, workers=1, gap=3, stop_event=None,
-                 downloader=None, throttle=None):
+                 downloader=None, throttle=None, report=None):
     """Download `ids` with a pool of worker threads pulling from one queue.
 
     Starts are spaced `gap` seconds apart across all workers. Songs not yet
     started are skipped once `stop_event` is set; songs in progress finish.
-    Returns the list of ids that were actually attempted.
+    Returns the list of ids that were actually attempted. If `report` is
+    given, `report.retries` (id -> retries done) and `report.retry_recovered`
+    (retried ids that then succeeded) are filled in.
     """
-    downloader = downloader or download_song
+    retries = {}
+    recovered = []
+    if report is not None:
+        report.retries, report.retry_recovered = retries, recovered
+    lock = threading.Lock()
+
+    def on_retry(song_id, attempt, exc):
+        with lock:
+            retries[song_id] = attempt
+
+    # download_song is looked up at call time (tests patch it).
+    downloader = downloader or (
+        lambda opts, url: download_song(opts, url, on_retry=on_retry))
     throttle = throttle or StartThrottle(gap)
     ids = list(dict.fromkeys(ids))  # drop duplicates, keep order
     attempted = []
-    lock = threading.Lock()
 
     def one(song_id):
         if stop_event is not None and stop_event.is_set():
@@ -200,7 +216,10 @@ def download_all(ids, ydl_opts, workers=1, gap=3, stop_event=None,
         with lock:
             attempted.append(song_id)
         log.info("Downloading %s", song_id)
-        downloader(ydl_opts, f"https://www.youtube.com/watch?v={song_id}")
+        ok = downloader(ydl_opts, f"https://www.youtube.com/watch?v={song_id}")
+        with lock:
+            if ok is not False and song_id in retries:
+                recovered.append(song_id)
 
     with ThreadPoolExecutor(max_workers=max(1, workers),
                             thread_name_prefix="dl") as pool:
@@ -224,6 +243,10 @@ def download_main(output_dir=None, urls=None, file_format="m4a", report=None,
     log.info("Download directory: %s",
              report.host_download_dir or report.download_dir)
 
+    report.download_workers = config.download_workers()
+    report.download_gap_seconds = config.download_sleep_seconds()
+    report.download_retries_allowed = config.download_retries()
+
     log.info("Identifying new songs to download...")
     all_ids = list_playlist_ids(urls or config.playlist_urls())
     already, todo = split_playlist_ids(all_ids, output_dir, file_format)
@@ -240,17 +263,20 @@ def download_main(output_dir=None, urls=None, file_format="m4a", report=None,
 
     before = drive_upload.local_song_ids(output_dir, file_format)
     ydl_opts = _ydl_opts(output_dir, file_format)
-    workers = config.download_workers()
-    log.info("Starting downloads (%d worker(s), %ss between starts)...",
-             workers, config.download_sleep_seconds())
-    download_all(todo, ydl_opts, workers=workers,
-                 gap=config.download_sleep_seconds(), stop_event=stop_event)
+    log.info("Starting downloads (%d worker(s), %ss between starts, "
+             "up to %d retries per song)...", report.download_workers,
+             report.download_gap_seconds, report.download_retries_allowed)
+    download_all(todo, ydl_opts, workers=report.download_workers,
+                 gap=report.download_gap_seconds, stop_event=stop_event,
+                 report=report)
 
     after = drive_upload.local_song_ids(output_dir, file_format)
     report.downloaded = [n for i, n in after.items() if i not in before]
     report.download_failed = [i for i in todo if i not in after]
-    log.info("Download finished: %d downloaded, %d failed.",
-             len(report.downloaded), len(report.download_failed))
+    log.info("Download finished: %d downloaded, %d failed, %d retries "
+             "(%d song(s) recovered after a retry).",
+             len(report.downloaded), len(report.download_failed),
+             sum(report.retries.values()), len(report.retry_recovered))
     return report
 
 

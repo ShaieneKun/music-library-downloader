@@ -32,10 +32,33 @@ class CycleLogTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def fake_download(self, opts, url):
+    def fake_download(self, opts, url, **_):
         song_id = url.rsplit("=", 1)[1]
         if song_id != "FAILFAILFAI":
             open(os.path.join(self.songs, song(song_id)), "w").close()
+
+    def test_cycle_report_records_download_settings_and_retries(self):
+        env = {"DOWNLOAD_WORKERS": "3", "DOWNLOAD_SLEEP_SECONDS": "0",
+               "DOWNLOAD_RETRIES": "2"}
+
+        def flaky(opts, url, on_retry=None, **_):
+            song_id = url.rsplit("=", 1)[1]
+            if on_retry:
+                on_retry(song_id, 1, Exception("HTTP Error 403"))
+            open(os.path.join(self.songs, song(song_id)), "w").close()
+            return True
+
+        rep, _ = self.run_cycle_with(ids=["bbbbbbbbbbb"], env=env, download=flaky)
+        self.assertEqual(rep.download_workers, 3)
+        self.assertEqual(rep.download_gap_seconds, 0)
+        self.assertEqual(rep.download_retries_allowed, 2)
+        self.assertEqual(rep.retries, {"bbbbbbbbbbb": 1})
+        self.assertEqual(rep.retry_recovered, ["bbbbbbbbbbb"])
+        with open(rep.log_file) as f:
+            log_text = f.read()
+        self.assertIn("3 worker(s), 0.0s between starts, up to 2 retries", log_text)
+        self.assertIn("1 retries (1 song(s) recovered", log_text)
+        self.assertIn("Retries done:                   1 (1 song(s) recovered", log_text)
 
     def test_full_cycle_report_and_log_upload(self):
         open(os.path.join(self.songs, song("aaaaaaaaaaa")), "w").close()
@@ -167,7 +190,7 @@ class CycleLogTests(unittest.TestCase):
         up.assert_called_once_with(rep.log_file)  # error cycles count as activity
 
     def test_errors_during_cycle_are_counted_in_summary(self):
-        def noisy(opts, url):
+        def noisy(opts, url, **_):
             logging.getLogger("yt_dlp").error("boom")
 
         rep, _ = self.run_cycle_with(ids=["bbbbbbbbbbb"], download=noisy)
@@ -178,7 +201,7 @@ class CycleLogTests(unittest.TestCase):
         root = logging.getLogger()
         handlers_before, level_before = list(root.handlers), root.level
 
-        def chatty(opts, url):
+        def chatty(opts, url, **_):
             logging.getLogger("yt_dlp").debug("[download] details")
 
         rep, _ = self.run_cycle_with(ids=["bbbbbbbbbbb"], download=chatty)
@@ -319,6 +342,30 @@ class ReportTests(unittest.TestCase):
                 "Google Drive logs path:         My Drive/Music/logs",
                 "      - B.m4a", "Errors logged this cycle:       2"):
             self.assertIn(expected, text)
+
+    def test_render_omits_download_settings_when_unset(self):
+        text = report.CycleReport(log_file="/l").render()
+        self.assertNotIn("Download workers", text)
+        self.assertNotIn("Retries done", text)
+
+    def test_render_shows_download_settings_and_no_retries(self):
+        text = report.CycleReport(
+            log_file="/l", download_workers=4, download_gap_seconds=2.0,
+            download_retries_allowed=2).render()
+        self.assertIn("Download workers:               4", text)
+        self.assertIn("Gap between song starts:        2s", text)
+        self.assertIn("Retries allowed per song:       2", text)
+        self.assertIn("Retries done:                   0\n", text)
+
+    def test_render_lists_retries_with_outcome(self):
+        text = report.CycleReport(
+            log_file="/l", download_workers=4, download_gap_seconds=2.5,
+            download_retries_allowed=2, retries={"aaa": 1, "bbb": 2},
+            retry_recovered=["aaa"]).render()
+        self.assertIn("Gap between song starts:        2.5s", text)
+        self.assertIn("Retries done:                   3 (1 song(s) recovered, 1 still failed)", text)
+        self.assertIn("      - aaa: 1 retry, recovered", text)
+        self.assertIn("      - bbb: 2 retries, failed", text)
 
     def test_had_activity(self):
         self.assertFalse(report.CycleReport().had_activity)

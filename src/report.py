@@ -16,6 +16,11 @@ class CycleReport:
     to_download: list = field(default_factory=list)         # video ids
     downloaded: list = field(default_factory=list)          # file names
     download_failed: list = field(default_factory=list)     # video ids
+    download_workers: int = None          # parallel download threads
+    download_gap_seconds: float = None    # min gap between song starts
+    download_retries_allowed: int = None  # max retries per song
+    retries: dict = field(default_factory=dict)             # video id -> retries done
+    retry_recovered: list = field(default_factory=list)     # retried ids that then succeeded
     uploaded: list = field(default_factory=list)            # file names
     upload_failed: list = field(default_factory=list)       # file names
     errors: int = 0
@@ -69,6 +74,24 @@ class CycleReport:
             f"Actually downloaded:            {len(self.downloaded)}"
             + lst(self.downloaded),
         ]
+        if self.download_workers is not None:
+            gap = f"{self.download_gap_seconds:g}s"
+            lines += [
+                f"Download workers:               {self.download_workers}",
+                f"Gap between song starts:        {gap}",
+                f"Retries allowed per song:       {self.download_retries_allowed}",
+            ]
+            total = sum(self.retries.values())
+            detail = ""
+            if total:
+                failed = [i for i in self.retries if i not in self.retry_recovered]
+                detail = (f" ({len(self.retry_recovered)} song(s) recovered, "
+                          f"{len(failed)} still failed)")
+            lines.append(f"Retries done:                   {total}{detail}"
+                         + lst(f"{i}: {n} retr{'y' if n == 1 else 'ies'}, "
+                               + ("recovered" if i in self.retry_recovered
+                                  else "failed")
+                               for i, n in self.retries.items()))
         if self.download_failed:
             lines.append(f"Download failed:                {len(self.download_failed)}"
                          + lst(self.download_failed))

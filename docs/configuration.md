@@ -27,7 +27,7 @@ See `README.md` for the one-time Google Drive setup.
 
 ## Download parallelism
 
-Songs are downloaded by `DOWNLOAD_WORKERS` threads in one container. A shared throttle keeps at least `DOWNLOAD_SLEEP_SECONDS` between song *starts* across all workers, so the gap, not the worker count, caps throughput: `songs × gap` is the minimum time for a cycle. Transient errors (HTTP 403/429/5xx, timeouts) are retried `DOWNLOAD_RETRIES` times; a song that still fails has its leftover files removed.
+Songs are downloaded by `DOWNLOAD_WORKERS` threads in one container. A shared throttle keeps at least `DOWNLOAD_SLEEP_SECONDS` between song *starts* across all workers, so the gap, not the worker count, caps throughput: `songs × gap` is the minimum time for a cycle. Transient errors (HTTP 403/429/5xx, timeouts) are retried `DOWNLOAD_RETRIES` times; a song that still fails has its leftover files removed. Each cycle summary and run log shows the workers, gap and retry settings used and any retries done (per song, recovered or not).
 
 Benchmark (38-song playlist, 33 downloadable, Drive off, one run each, Nov 2026):
 
@@ -35,7 +35,8 @@ Benchmark (38-song playlist, 33 downloadable, Drive off, one run each, Nov 2026)
 | --- | --- | --- | --- |
 | 1 (old behaviour) | 3 s | 273 s | 33 ok |
 | 4 | 3 s | 115 s | 33 ok |
+| 4 | 2 s (default) | 78 s | 33 ok, 0 retries needed |
 | 4 | 1 s | 42 s | 32 ok, 1 HTTP 403 (before retries existed) |
 | 8 | 1 s | 41 s | 33 ok |
 
-The default is 4 workers and a 2 s gap (about 80 s for this playlist), a compromise between speed and the risk of YouTube rejecting requests at 1 s. Raise the gap if you see 403/429 errors in the run log. More than 4 workers gains nothing at these gaps. The 2 s default itself was not benchmarked.
+The default is 4 workers and a 2 s gap (78 s for this playlist), a compromise between speed and the risk of YouTube rejecting requests at 1 s. Raise the gap if you see 403/429 errors in the run log. More than 4 workers gains nothing at these gaps.
