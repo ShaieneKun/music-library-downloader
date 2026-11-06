@@ -69,6 +69,17 @@ uv run main.py once ./my-downloads
 uv run python -m unittest discover -s src/tests -t .
 ```
 
+## Troubleshooting
+
+**`HTTP Error 403: Forbidden` while downloading.** YouTube changes its player often, so an old `yt-dlp` stops working. The image bundles a JavaScript runtime (Deno) that `yt-dlp` needs, but the `yt-dlp` version is fixed when the image is built. Update it and rebuild:
+
+```bash
+uv lock --upgrade-package yt-dlp
+docker compose build --no-cache && docker compose up -d
+```
+
+Rebuilding every few weeks avoids most of these failures.
+
 ## Notes
 
 - Files are named `<title> - <uploader> - <video id>.m4a`; the video ID is how already-downloaded songs are recognised.
