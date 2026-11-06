@@ -36,6 +36,12 @@ def drive_folder_name(env=None):
     return env.get("DRIVE_FOLDER_NAME") or "Music Library Downloader"
 
 
+def skip_download_if_uploaded(env=None):
+    """If true, songs already uploaded to Drive are not downloaded again."""
+    env = os.environ if env is None else env
+    return _bool(env.get("SKIP_DOWNLOAD_IF_UPLOADED"))
+
+
 def delete_after_upload(env=None):
     env = os.environ if env is None else env
     return _bool(env.get("DELETE_AFTER_UPLOAD"))

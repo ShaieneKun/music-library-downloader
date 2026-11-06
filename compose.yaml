@@ -9,9 +9,15 @@ services:
     env_file:
       - .env
     volumes:
-      # Named volume works the same on Linux, macOS and Windows.
-      # To browse the songs on the host instead, use e.g. ./data:/data
+      # State (Drive token, upload record) and logs live in a named volume.
       - data:/data
+      # Songs go to a host directory (MUSIC_DIR in .env, default ~/Music).
+      # Docker creates it if it doesn't exist.
+      - type: bind
+        source: ${MUSIC_DIR:-${HOME}/Music}
+        target: /data/songs
+        bind:
+          create_host_path: true
     stop_grace_period: 30s
 
 volumes:

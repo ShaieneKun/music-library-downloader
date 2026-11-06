@@ -41,8 +41,10 @@ def filter_url_ids_to_donwload(output_dir, file_format, urls=None):
     all_ids = list_playlist_ids(urls or config.playlist_urls())
 
     already = set(extract_ids_from_filenames(output_dir, file_format))
-    # Songs uploaded to Drive and then deleted locally must not come back.
-    already |= drive_upload.uploaded_ids()
+    # Opt-in: songs uploaded to Drive and then deleted locally do not come
+    # back. By default they are downloaded again (but never re-uploaded).
+    if config.skip_download_if_uploaded():
+        already |= drive_upload.uploaded_ids()
 
     to_download = [i for i in all_ids if i not in already]
     log.info("Playlist: %d songs, %d already have, %d to download",

@@ -14,15 +14,13 @@ docker compose logs -f
 
 The container restarts automatically (`restart: unless-stopped`), checks the playlist every `INTERVAL_SECONDS` (default 1 hour) and only downloads songs it doesn't already have.
 
-All persistent data lives in the `/data` volume:
+Songs are saved to a directory on the host (`MUSIC_DIR`, default `~/Music`; created if missing). The rest lives in the `/data` volume:
 
 | Path | Contents |
 | --- | --- |
-| `/data/songs` | downloaded `.m4a` files |
+| `/data/songs` | downloaded `.m4a` files (bind-mounted from `MUSIC_DIR` on the host) |
 | `/data/state` | Google Drive token + record of what was uploaded |
 | `/data/logs` | rotating `app.log` |
-
-To browse songs on the host, change the volume in `compose.yaml` to `./data:/data`.
 
 ## Configuration (`.env`)
 
@@ -30,9 +28,11 @@ To browse songs on the host, change the volume in `compose.yaml` to `./data:/dat
 | --- | --- | --- |
 | `PLAYLIST_URL` | built-in sample | One or more playlist URLs (space/comma separated) |
 | `INTERVAL_SECONDS` | `3600` | Time between checks |
+| `MUSIC_DIR` | `~/Music` | Host directory for downloaded songs (absolute path; created if missing) |
 | `DRIVE_UPLOAD_ENABLED` | `false` | Upload new songs to Google Drive |
 | `DRIVE_FOLDER_NAME` | `Music Library Downloader` | Folder in My Drive (`Music/Auto` creates nested folders) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | – | OAuth client, see below |
+| `SKIP_DOWNLOAD_IF_UPLOADED` | `false` | `false`: download songs missing locally even if already in Drive (never re-uploaded). `true`: skip songs already uploaded |
 | `DELETE_AFTER_UPLOAD` | `false` | Delete the local file once uploaded |
 
 ## Google Drive setup (one time)

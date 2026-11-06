@@ -11,6 +11,11 @@ services:
       - 5678:5678
     volumes:
       - data:/data
+      - type: bind
+        source: ${MUSIC_DIR:-${HOME}/Music}
+        target: /data/songs
+        bind:
+          create_host_path: true
 
 volumes:
   data:
