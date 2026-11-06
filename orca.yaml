@@ -1,0 +1,9 @@
+# Orca workspace hooks.
+scripts:
+  setup: |
+    # Share one .env across all workspaces: the primary checkout holds the real
+    # file and every workspace gets a symlink to it.
+    root="${ORCA_ROOT_PATH:-$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")}"
+    if [ -f "$root/.env" ] && [ "$root" != "$PWD" ]; then
+      ln -sfn "$root/.env" .env
+    fi
