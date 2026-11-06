@@ -21,6 +21,16 @@ def interval_seconds(env=None):
     return int(env.get("INTERVAL_SECONDS") or 3600)
 
 
+def auto_update_enabled(env=None):
+    env = os.environ if env is None else env
+    return _bool(env.get("YTDLP_AUTO_UPDATE"), default=True)
+
+
+def update_interval_seconds(env=None):
+    env = os.environ if env is None else env
+    return int(env.get("YTDLP_UPDATE_INTERVAL_SECONDS") or 86400)
+
+
 def state_dir(env=None):
     env = os.environ if env is None else env
     return os.path.expanduser(env.get("STATE_DIR") or "./state")

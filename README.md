@@ -30,6 +30,8 @@ To browse songs on the host, change the volume in `compose.yaml` to `./data:/dat
 | --- | --- | --- |
 | `PLAYLIST_URL` | built-in sample | One or more playlist URLs (space/comma separated) |
 | `INTERVAL_SECONDS` | `3600` | Time between checks |
+| `YTDLP_AUTO_UPDATE` | `true` | Upgrade `yt-dlp` at startup and then periodically; the service restarts itself if a new version was installed |
+| `YTDLP_UPDATE_INTERVAL_SECONDS` | `86400` | Time between update checks |
 | `DRIVE_UPLOAD_ENABLED` | `false` | Upload new songs to Google Drive |
 | `DRIVE_FOLDER_NAME` | `Music Library Downloader` | Folder in My Drive (`Music/Auto` creates nested folders) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | – | OAuth client, see below |
@@ -71,14 +73,12 @@ uv run python -m unittest discover -s src/tests -t .
 
 ## Troubleshooting
 
-**`HTTP Error 403: Forbidden` while downloading.** YouTube changes its player often, so an old `yt-dlp` stops working. The image bundles a JavaScript runtime (Deno) that `yt-dlp` needs, but the `yt-dlp` version is fixed when the image is built. Update it and rebuild:
+**`HTTP Error 403: Forbidden` while downloading.** YouTube changes its player often, so an old `yt-dlp` stops working. The image bundles a JavaScript runtime (Deno) that `yt-dlp` needs, and the service upgrades `yt-dlp` automatically (see `YTDLP_AUTO_UPDATE`). The upgrade lives in the container, so it is lost if the container is re-created from the image and redone at the next startup. To bake a newer version into the image:
 
 ```bash
 uv lock --upgrade-package yt-dlp
 docker compose build --no-cache && docker compose up -d
 ```
-
-Rebuilding every few weeks avoids most of these failures.
 
 ## Notes
 

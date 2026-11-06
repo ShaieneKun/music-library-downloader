@@ -8,6 +8,7 @@ from logging.handlers import RotatingFileHandler
 import src.setup_ffmpeg
 import src.download_songs
 import src.drive_upload
+import src.updater
 from src import config
 
 stop_event = threading.Event()
@@ -47,7 +48,9 @@ def resolve_download_directory(cli_args=None, env=None):
 def run_forever(download_dir=None):
     log = logging.getLogger("main")
     interval = config.interval_seconds()
+    updater = src.updater.AutoUpdater()
     while not stop_event.is_set():
+        updater.maybe_update()
         try:
             src.download_songs.main(download_dir)
         except Exception:
