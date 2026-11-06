@@ -20,7 +20,32 @@ All persistent data lives in the `/data` volume:
 | --- | --- |
 | `/data/songs` | downloaded `.m4a` files |
 | `/data/state` | Google Drive token + record of what was uploaded |
-| `/data/logs` | rotating `app.log` |
+| `/data/logs` | rotating `app.log` (INFO) and one `cycle-<timestamp>.log` (DEBUG) per cycle |
+
+### Run logs
+
+Every cycle writes `cycle-<timestamp>.log` with the full debug output (including `yt-dlp`) and ends with a summary like:
+
+```text
+============================================================
+CYCLE SUMMARY
+============================================================
+Download directory (full path): /data/songs
+Playlist songs found:           120
+Already downloaded (skipped):   118
+To be downloaded:               2
+      - abc123DEF45
+Actually downloaded:            2
+      - Song - Artist - abc123DEF45.m4a
+Google Drive songs path:        My Drive/Music Library Downloader
+Uploaded to Google Drive:       2
+Google Drive logs path:         My Drive/Music Library Downloader/logs
+Errors logged this cycle:       0
+Log file:                       /data/logs/cycle-2026-11-06_03-16-09.log
+============================================================
+```
+
+With Drive upload enabled, the log is also uploaded to the `logs` folder inside your Drive folder. Cycles where nothing happened are discarded (set `LOG_KEEP_IDLE=true` to keep them).
 
 To browse songs on the host, change the volume in `compose.yaml` to `./data:/data`.
 
@@ -32,6 +57,8 @@ To browse songs on the host, change the volume in `compose.yaml` to `./data:/dat
 | `INTERVAL_SECONDS` | `3600` | Time between checks |
 | `YTDLP_AUTO_UPDATE` | `true` | Upgrade `yt-dlp` at startup and then periodically; the service restarts itself if a new version was installed |
 | `YTDLP_UPDATE_INTERVAL_SECONDS` | `86400` | Time between update checks |
+| `LOG_KEEP_IDLE` | `false` | Keep (and upload) the run log even when a cycle did nothing |
+| `LOG_RETENTION_DAYS` | `14` | Delete local run logs older than this |
 | `DRIVE_UPLOAD_ENABLED` | `false` | Upload new songs to Google Drive |
 | `DRIVE_FOLDER_NAME` | `Music Library Downloader` | Folder in My Drive (`Music/Auto` creates nested folders) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | – | OAuth client, see below |

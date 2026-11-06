@@ -128,8 +128,8 @@ def _escape(name):
 
 def _ensure_folder(service, state, path):
     """Return the Drive folder id for `path` (a/b/c), creating it if needed."""
-    cached = state.get("folder")
-    if cached and cached.get("path") == path:
+    cached = state.setdefault("folders", {}).get(path)
+    if cached:
         try:
             meta = service.files().get(
                 fileId=cached["id"], fields="id,trashed").execute(num_retries=3)
@@ -151,7 +151,7 @@ def _ensure_folder(service, state, path):
                 body={"name": part, "mimeType": FOLDER_MIME, "parents": [parent]},
                 fields="id").execute(num_retries=3)
             parent = created["id"]
-    state["folder"] = {"path": path, "id": parent}
+    state["folders"][path] = {"id": parent}
     save_state(state)
     return parent
 
@@ -173,38 +173,66 @@ def uploaded_ids():
     return set(load_state().get("uploaded", {}))
 
 
-def upload_new_songs(directory, file_format="m4a"):
-    """Upload every local song not yet uploaded. Returns number uploaded."""
+def drive_path(subfolder=None):
+    """Human-readable Drive location, e.g. 'My Drive/Music/logs'."""
+    parts = ["My Drive"] + [p for p in config.drive_folder_name().split("/") if p]
+    if subfolder:
+        parts.append(subfolder)
+    return "/".join(parts)
+
+
+def _upload_file(service, folder_id, local_path, name, mimetype):
+    """Upload one file into a Drive folder. Returns the new Drive file id."""
     from googleapiclient.http import MediaFileUpload
 
+    media = MediaFileUpload(local_path, mimetype=mimetype, resumable=True)
+    created = service.files().create(
+        body={"name": name, "parents": [folder_id]},
+        media_body=media, fields="id").execute(num_retries=5)
+    return created["id"]
+
+
+def upload_new_songs(directory, file_format="m4a"):
+    """Upload every local song not yet uploaded.
+
+    Returns (uploaded_names, failed_names).
+    """
     state = load_state()
     done = state.setdefault("uploaded", {})
     pending = {i: n for i, n in local_song_ids(directory, file_format).items()
                if i not in done}
     if not pending:
         log.info("Drive: nothing new to upload.")
-        return 0
+        return [], []
 
     service = _service(state)
     folder_id = _ensure_folder(service, state, config.drive_folder_name())
-    count = 0
+    uploaded, failed = [], []
     for song_id, name in pending.items():
         full = os.path.join(directory, name)
         log.info("Drive: uploading %s", name)
         try:
-            media = MediaFileUpload(
-                full, mimetype=AUDIO_MIME.get(file_format, "application/octet-stream"),
-                resumable=True)
-            created = service.files().create(
-                body={"name": name, "parents": [folder_id]},
-                media_body=media, fields="id").execute(num_retries=5)
+            done[song_id] = _upload_file(
+                service, folder_id, full, name,
+                AUDIO_MIME.get(file_format, "application/octet-stream"))
         except Exception as exc:
             log.error("Drive: failed to upload %s: %s", name, exc)
+            failed.append(name)
             continue
-        done[song_id] = created["id"]
         save_state(state)
-        count += 1
+        uploaded.append(name)
         if config.delete_after_upload():
             os.remove(full)
-    log.info("Drive: uploaded %d song(s).", count)
-    return count
+    log.info("Drive: uploaded %d song(s), %d failed.", len(uploaded), len(failed))
+    return uploaded, failed
+
+
+def upload_logfile(local_path):
+    """Upload a run log to the `logs` subfolder of the Drive folder."""
+    state = load_state()
+    service = _service(state)
+    folder_id = _ensure_folder(
+        service, state, config.drive_folder_name().rstrip("/") + "/logs")
+    _upload_file(service, folder_id, local_path,
+                 os.path.basename(local_path), "text/plain")
+    log.info("Drive: uploaded log to %s", drive_path("logs"))
