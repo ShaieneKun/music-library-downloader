@@ -9,6 +9,11 @@ services:
     command: ["sh", "-c", "pip install debugpy -t /tmp && python /tmp/debugpy --wait-for-client --listen 0.0.0.0:5678 main.py"]
     ports:
       - 5678:5678
+    environment:
+      # Host path of the songs directory, only shown in the cycle summary.
+      HOST_MUSIC_DIR: ${MUSIC_DIR:-${HOME}/Music}
+      # Real host name for the summary (container hostname if empty).
+      HOST_HOSTNAME: ${HOST_HOSTNAME:-}
     volumes:
       - data:/data
       - type: bind

@@ -11,6 +11,7 @@ Set in `.env` (copy from `.env.template`). `.env` is git-ignored.
 | `DRIVE_FOLDER_NAME` | `Music Library Downloader` | Folder in My Drive; `Music/Auto` creates nested folders |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | none | OAuth client (type "TVs and Limited Input devices") |
 | `SKIP_DOWNLOAD_IF_UPLOADED` | `false` | `false`: download songs missing locally even if already in Drive (they are never re-uploaded). `true`: skip songs already uploaded |
+| `HOST_HOSTNAME` | container hostname | Machine name shown in the cycle summary. In a container the default is a random id, so set the real one (compose passes it through; e.g. `export HOST_HOSTNAME=$(hostname)` or put it in `.env`) |
 | `YTDLP_AUTO_UPDATE` | `true` | Upgrade `yt-dlp` at startup and periodically; restarts itself after an upgrade |
 | `YTDLP_UPDATE_INTERVAL_SECONDS` | `86400` | Time between update checks |
 | `LOG_KEEP_IDLE` | `false` | Keep (and upload) the run log even when a cycle did nothing |

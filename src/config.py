@@ -1,5 +1,6 @@
 """Runtime configuration, read from environment variables."""
 import os
+import socket
 
 DEFAULT_PLAYLIST_URL = "https://music.youtube.com/playlist?list=PL1Fdfnmz532fUiMPemHsxmyAyCJISoD9P"
 
@@ -55,6 +56,26 @@ def drive_enabled(env=None):
 def drive_folder_name(env=None):
     env = os.environ if env is None else env
     return env.get("DRIVE_FOLDER_NAME") or "Music Library Downloader"
+
+
+def hostname(env=None):
+    """Name of the machine running the app.
+
+    Inside a container `socket.gethostname()` is the container id, so compose
+    passes the real host name in as HOST_HOSTNAME when it is available.
+    """
+    env = os.environ if env is None else env
+    return env.get("HOST_HOSTNAME") or socket.gethostname()
+
+
+def host_music_dir(env=None):
+    """Songs directory as seen on the host (set by compose from MUSIC_DIR).
+
+    Only used for display: inside a container the songs path is the mount
+    point (/data/songs), which means nothing to the user.
+    """
+    env = os.environ if env is None else env
+    return env.get("HOST_MUSIC_DIR") or ""
 
 
 def skip_download_if_uploaded(env=None):

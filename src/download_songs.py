@@ -107,7 +107,9 @@ def download_main(output_dir=None, urls=None, file_format="m4a", report=None):
         output_dir = os.path.join(DEFAULT_DOWNLOAD_DIR, file_format)
     os.makedirs(output_dir, exist_ok=True)
     report.download_dir = os.path.abspath(output_dir)
-    log.info("Download directory: %s", report.download_dir)
+    report.host_download_dir = config.host_music_dir()
+    log.info("Download directory: %s",
+             report.host_download_dir or report.download_dir)
 
     log.info("Identifying new songs to download...")
     all_ids = list_playlist_ids(urls or config.playlist_urls())

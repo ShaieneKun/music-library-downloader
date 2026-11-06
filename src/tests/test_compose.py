@@ -36,7 +36,7 @@ class MusicDirComposeTests(unittest.TestCase):
         with open(os.path.join(self.project, ".env"), "w") as f:
             f.write(content)
 
-    def volumes(self, compose_file, **env):
+    def service(self, compose_file, **env):
         # Minimal environment: no inherited MUSIC_DIR, controlled HOME.
         full_env = {"PATH": os.environ["PATH"], "HOME": "/home/tester"}
         # The fake HOME hides the docker CLI config (and its compose plugin).
@@ -50,8 +50,14 @@ class MusicDirComposeTests(unittest.TestCase):
             ["docker", "compose", "-f", compose_file, "config", "--format", "json"],
             cwd=self.project, env=full_env, capture_output=True, text=True,
             check=True).stdout
-        service = json.loads(out)["services"]["music-library-downloader"]
-        return {v["target"]: v for v in service["volumes"]}
+        return json.loads(out)["services"]["music-library-downloader"]
+
+    def volumes(self, compose_file, **env):
+        return {v["target"]: v
+                for v in self.service(compose_file, **env)["volumes"]}
+
+    def environment(self, compose_file, **env):
+        return self.service(compose_file, **env)["environment"]
 
     def test_defaults_to_music_folder_in_home(self):
         for f in COMPOSE_FILES:
@@ -85,6 +91,23 @@ class MusicDirComposeTests(unittest.TestCase):
             with self.subTest(file=f):
                 songs = self.volumes(f)["/data/songs"]
                 self.assertTrue(songs["bind"]["create_host_path"])
+
+    def test_host_dir_is_passed_to_container_for_the_summary(self):
+        for f in COMPOSE_FILES:
+            with self.subTest(file=f):
+                self.assertEqual(self.environment(f)["HOST_MUSIC_DIR"],
+                                 "/home/tester/Music")
+                self.assertEqual(
+                    self.environment(f, MUSIC_DIR="/mnt/media")["HOST_MUSIC_DIR"],
+                    "/mnt/media")
+
+    def test_host_hostname_is_passed_through_or_empty(self):
+        for f in COMPOSE_FILES:
+            with self.subTest(file=f):
+                self.assertEqual(self.environment(f)["HOST_HOSTNAME"], "")
+                self.assertEqual(
+                    self.environment(f, HOST_HOSTNAME="my-mac")["HOST_HOSTNAME"],
+                    "my-mac")
 
     def test_state_and_logs_stay_in_named_volume(self):
         for f in COMPOSE_FILES:

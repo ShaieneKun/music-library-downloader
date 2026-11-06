@@ -65,6 +65,49 @@ class CycleLogTests(unittest.TestCase):
         self.assertIn("Actually downloaded:            1", text)
         self.assertIn("Uploaded to Google Drive:       1", text)
 
+    def run_idle_cycle(self, **kwargs):
+        with mock.patch.object(download_songs, "list_playlist_ids", return_value=[]), \
+                mock.patch.object(download_songs.drive_upload, "uploaded_ids",
+                                  return_value=set()), \
+                mock.patch.dict(os.environ, {"LOG_KEEP_IDLE": "true",
+                                             "HOST_HOSTNAME": "my-mac"}):
+            return main.run_logged_cycle(self.songs, **kwargs)
+
+    def test_manual_run_is_reported_as_manual_with_hostname(self):
+        rep = self.run_idle_cycle()
+        self.assertEqual((rep.mode, rep.hostname), ("manual", "my-mac"))
+        self.assertIsNone(rep.daemon_cycles)
+        text = read(rep.log_file)
+        self.assertIn("Host:                           my-mac", text)
+        self.assertIn("manual (single run)", text)
+
+    def test_daemon_run_reports_uptime_and_cycle_number(self):
+        started = time.monotonic() - 90
+        rep = self.run_idle_cycle(daemon_started=started, daemon_cycles=4)
+        self.assertEqual((rep.mode, rep.daemon_cycles), ("daemon", 4))
+        self.assertGreaterEqual(rep.daemon_uptime_seconds, 90)
+        text = read(rep.log_file)
+        self.assertIn("Run mode:                       daemon", text)
+        self.assertRegex(text, r"Daemon running for:             1m \d+s")
+        self.assertIn("Daemon cycles so far:           4 (including this one)", text)
+
+    def test_run_forever_counts_cycles_and_passes_start_time(self):
+        calls = []
+
+        def fake_cycle(download_dir, daemon_started, daemon_cycles):
+            calls.append((daemon_started, daemon_cycles))
+            if daemon_cycles == 3:
+                main.stop_event.set()
+
+        main.stop_event.clear()
+        self.addCleanup(main.stop_event.clear)
+        with mock.patch.object(main, "run_logged_cycle", fake_cycle), \
+                mock.patch.object(main.src.updater, "AutoUpdater"), \
+                mock.patch.object(main.stop_event, "wait"):
+            main.run_forever(self.songs)
+        self.assertEqual([c for _, c in calls], [1, 2, 3])
+        self.assertEqual(len({s for s, _ in calls}), 1)  # same start time
+
     def test_idle_cycle_removes_log_and_skips_upload(self):
         with mock.patch.object(download_songs, "list_playlist_ids", return_value=[]), \
                 mock.patch.object(download_songs.drive_upload, "upload_new_songs",
@@ -197,10 +240,60 @@ class DownloadMainTests(unittest.TestCase):
 
 
 class ReportTests(unittest.TestCase):
+    def test_format_duration(self):
+        fmt = report.CycleReport.format_duration
+        self.assertEqual(fmt(0), "0s")
+        self.assertEqual(fmt(59.9), "59s")
+        self.assertEqual(fmt(3661), "1h 1m 1s")
+        self.assertEqual(fmt(2 * 86400 + 3 * 3600 + 4 * 60 + 5), "2d 3h 4m 5s")
+        self.assertEqual(fmt(86400), "1d 0s")
+
+    def test_render_manual_run_has_host_and_no_daemon_stats(self):
+        text = report.CycleReport(hostname="my-mac", log_file="/l").render()
+        self.assertIn("Host:                           my-mac", text)
+        self.assertIn("Run mode:                       manual (single run)", text)
+        self.assertNotIn("Daemon running for", text)
+        self.assertNotIn("Daemon cycles", text)
+
+    def test_render_daemon_shows_uptime_and_cycle_count(self):
+        text = report.CycleReport(hostname="srv", mode="daemon", log_file="/l",
+                                  daemon_uptime_seconds=3725,
+                                  daemon_cycles=3).render()
+        self.assertIn("Run mode:                       daemon", text)
+        self.assertIn("Daemon running for:             1h 2m 5s", text)
+        self.assertIn("Daemon cycles so far:           3 (including this one)", text)
+        self.assertNotIn("manual", text)
+
+    def test_render_without_hostname_says_unknown(self):
+        self.assertIn("(unknown)", report.CycleReport(log_file="/l").render())
+
     def test_render_without_drive(self):
         text = report.CycleReport(download_dir="/x/songs", log_file="/x/l.log").render()
         self.assertIn("/x/songs", text)
         self.assertIn("Google Drive upload:            disabled", text)
+
+    def test_render_shows_host_dir_instead_of_container_dir(self):
+        text = report.CycleReport(download_dir="/data/songs",
+                                  host_download_dir="/Users/me/Music",
+                                  log_file="/x/l.log").render()
+        self.assertIn("Download directory (full path): /Users/me/Music", text)
+        self.assertNotIn("/data/songs", text)
+
+    def test_host_dir_is_shown_verbatim_even_if_not_a_posix_path(self):
+        text = report.CycleReport(download_dir="/data/songs",
+                                  host_download_dir=r"C:\Users\me\Music",
+                                  log_file="/x/l.log").render()
+        self.assertIn(r"C:\Users\me\Music", text)
+
+    def test_download_main_records_host_dir_from_env(self):
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.dict(os.environ, {"HOST_MUSIC_DIR": "/Users/me/Music"}), \
+                mock.patch.object(download_songs, "list_playlist_ids", return_value=[]), \
+                mock.patch.object(download_songs.drive_upload, "uploaded_ids",
+                                  return_value=set()):
+            rep = download_songs.download_main(d)
+        self.assertEqual(rep.host_download_dir, "/Users/me/Music")
+        self.assertEqual(rep.download_dir, os.path.abspath(d))
 
     def test_render_uses_absolute_paths(self):
         text = report.CycleReport(download_dir="rel/songs", log_file="rel/l.log").render()

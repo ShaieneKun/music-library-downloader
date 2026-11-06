@@ -56,8 +56,12 @@ def prune_old_logs(logs_dir, days):
             os.remove(path)
 
 
-def run_logged_cycle(download_dir=None):
-    """Run one cycle writing a DEBUG run log, then ship it to Google Drive."""
+def run_logged_cycle(download_dir=None, daemon_started=None, daemon_cycles=None):
+    """Run one cycle writing a DEBUG run log, then ship it to Google Drive.
+
+    `daemon_started` (time.monotonic() at start) and `daemon_cycles` are given
+    only by the long-running service; without them this is a manual run.
+    """
     log = logging.getLogger("main")
     logs_dir = os.environ.get('LOG_DIR') or './logs'
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -73,7 +77,11 @@ def run_logged_cycle(download_dir=None):
     root.addHandler(file_handler)
     root.addHandler(errors)
 
-    report = src.report.CycleReport(log_file=log_path)
+    report = src.report.CycleReport(log_file=log_path, hostname=config.hostname())
+    if daemon_started is not None:
+        report.mode = "daemon"
+        report.daemon_uptime_seconds = time.monotonic() - daemon_started
+        report.daemon_cycles = daemon_cycles
     try:
         try:
             src.download_songs.run_cycle(download_dir, report=report)
@@ -119,10 +127,14 @@ def run_forever(download_dir=None):
     log = logging.getLogger("main")
     interval = config.interval_seconds()
     updater = src.updater.AutoUpdater()
+    started = time.monotonic()
+    cycles = 0
     while not stop_event.is_set():
         updater.maybe_update()
+        cycles += 1
         try:
-            run_logged_cycle(download_dir)
+            run_logged_cycle(download_dir, daemon_started=started,
+                             daemon_cycles=cycles)
         except Exception:
             # Never let one bad cycle kill the long-running container.
             log.exception("Cycle failed; will retry after the interval.")

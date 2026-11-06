@@ -29,6 +29,7 @@ docker compose up -d --build                             # run the service
 - Do not use the system `python3` (3.9 on macOS); use `uv run` or the container.
 - Songs go to the host directory `MUSIC_DIR` (default `~/Music`), bind-mounted at `/data/songs`; state and logs stay in the `data` named volume. Keep `compose.yaml` and `compose.debug.yaml` in sync and update `src/tests/test_compose.py` when changing them.
 - Config is read from environment variables via `src/config.py`; add new settings there, to `.env.template`, `docs/configuration.md` and `README.md`.
-- Tests use `unittest` (no pytest). Add tests under `src/tests/` for new behaviour.
+- When making code changes, always create or update test cases for the new or changed behaviour (where it makes sense; skip for trivial edits such as docs or comments) and run them before finishing: `just test`, plus `just test-compose` if compose files changed. Report any failures instead of hiding them.
+- Tests use `unittest` (no pytest). Add tests under `src/tests/`.
 - Never commit `.env`, tokens, or downloaded songs (all git-ignored).
 - Keep these docs updated when behaviour changes.

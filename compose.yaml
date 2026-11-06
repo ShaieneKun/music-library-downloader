@@ -8,6 +8,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # Host path of the songs directory, only shown in the cycle summary.
+      HOST_MUSIC_DIR: ${MUSIC_DIR:-${HOME}/Music}
+      # Real host name for the summary (container hostname if empty).
+      HOST_HOSTNAME: ${HOST_HOSTNAME:-}
     volumes:
       # State (Drive token, upload record) and logs live in a named volume.
       - data:/data

@@ -21,7 +21,7 @@ A long-running service that mirrors YouTube Music playlists as `m4a` files and o
 2. It subtracts IDs found in filenames in the songs directory. With `SKIP_DOWNLOAD_IF_UPLOADED=true` it also subtracts IDs recorded as uploaded in `drive.json` (so songs uploaded then deleted locally do not come back); by default they are downloaded again.
 3. Each remaining song is downloaded (3 s pause between songs).
 4. If `DRIVE_UPLOAD_ENABLED` is true, local songs not yet recorded in `drive.json` are uploaded (never uploaded twice, regardless of the setting above); with `DELETE_AFTER_UPLOAD` the local copy is removed.
-5. A `CYCLE SUMMARY` block is logged and a DEBUG run log (`cycle-<timestamp>.log` in `LOG_DIR`) is written; with Drive enabled it is uploaded to a `logs` subfolder of the Drive folder. Idle cycles are discarded unless `LOG_KEEP_IDLE=true`; logs older than `LOG_RETENTION_DAYS` are deleted.
+5. A `CYCLE SUMMARY` block is logged (host name, run mode, host songs directory, counts; in daemon mode also how long the daemon has been running and the cycle number, including the current one; the uptime and counter reset when the process restarts, e.g. after a yt-dlp upgrade) and a DEBUG run log (`cycle-<timestamp>.log` in `LOG_DIR`) is written; with Drive enabled it is uploaded to a `logs` subfolder of the Drive folder. Idle cycles are discarded unless `LOG_KEEP_IDLE=true`; logs older than `LOG_RETENTION_DAYS` are deleted.
 6. `run` sleeps `INTERVAL_SECONDS` and repeats. An exception in one cycle is logged and does not stop the loop.
 
 ## Conventions
